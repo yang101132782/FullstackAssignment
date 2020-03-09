@@ -1,0 +1,359 @@
+<!Doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ChatRoom</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <script src="../../js/socket.io.js"></script>
+    <script src="../../js/jquery.min.js"></script>
+</head>
+<body>
+<div class="main">
+    <div class="top">
+        <div class="top-left">
+            <div class="header">
+                <img id="header-image" src="./images/1.jpg" style="width:48px;height:48px;border-radius: 50%;">
+            </div>
+
+            <div class="nickname">
+                <p id="nickname">Nick</p>
+            </div>
+
+            <div class="search">
+                <input type="text" onkeyup="search(this)">
+                <i class="icon-sear"></i>
+            </div>
+
+        </div>
+        <div class="top-type">
+            <a href="#" class="news icon-site"></a>
+            <a href="#" class="friend icon-site"></a>
+            <a href="#" class="file icon-site"></a>
+        </div>
+        <div class="top-right">
+            <i class="ic-menu ic-same"></i>
+            <i class="ic-shrink ic-same"></i>
+            <i class="ic-boost ic-same"></i>
+            <i class="ic-close ic-same" id="create-group"></i>
+        </div>
+    </div>
+    <div class="box">
+        <div class="chat-list" id="group">
+
+        </div>
+        <div class="box-right">
+            <div class="recvfrom">
+                <div class="nav-top">
+                    <p id="group-title"></p>
+                </div>
+                <div class="news-top">
+                    <ul class="message">
+
+                    </ul>
+                </div>
+            </div>
+            <div class="sendto">
+                <p>&nbsp;</p>
+                <div class="but-text">
+                    <textarea name="" id="inputarea" cols="110" rows="6"
+                              style="resize: none;margin: 0 0 0 20px; width: 715px; height: 113px;"></textarea>
+                    <a href="#" class="button" onclick="send()">Send(enter)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var socket = io.connect('http://localhost:3000');
+    var message = document.getElementsByClassName('message')[0];
+    var div = document.getElementsByClassName('news-top')[0];
+    var input = document.getElementById('inputarea');
+    var nickname = '', sex = '',isJoin = false;
+
+    function random(lower, upper) {
+        return Math.floor(Math.random() * (upper - lower + 1)) + lower;
+    }
+
+    function send() {
+        //send message to server
+        let user = JSON.parse(window.sessionStorage.getItem('user'));
+
+        socket.emit('message', {
+            id: 1,
+            sender: user.nickname,
+            header: user.header,
+            receiver: $("#group-title").html(),
+            message: input.value,
+            time: Date.parse(new Date()) / 1000
+        });
+        input.value = '';
+    }
+
+    function search(obj = '') {
+        // console.log(obj.value);
+        $.post('http://localhost:3000/api/roomlist', {'roomname': obj.value}, function (data) {
+            // console.log(data);
+            if (data.length === 0) {
+                $("#group").empty().html('<center>no results</center>');
+                return false;
+            }
+
+            var html = '';
+            $.each(data, function (k, v) {
+                html += '<div data-name="' + v.name + '" class="list-box">\n' +
+                    '                <img class="chat-head" src="' + v.header + '" alt="">\n' +
+                    '                <div class="chat-rig">\n' +
+                    '                    <p class="title">' + v.name + '</p>\n' +
+                    '                    <p class="text">' + v.sender + ': ' + v.message + '</p>\n' +
+                    '                </div>\n' +
+                    '               </div>'
+            });
+            $("#group").html(html);
+        })
+    }
+
+    socket.on('connect', () => {
+        // console.log(socket.connected); // true
+        if (socket.connected) {
+            while (!window.sessionStorage.getItem('user')) {
+                if (!nickname) {
+                    nickname = prompt('please input your nickname');
+                }
+
+                if (!sex) {
+                    sex = prompt('please input your sex, male or female');
+                }
+
+                if(nickname.length >= 8){
+                    alert('nickname is too long');
+                }else{
+                    if (nickname && sex) {
+                        var pos = random(1, 6);
+                        if (sex !== 'male' && sex !== 'female') {
+                            sex = 'male';
+                        }
+                        var avatar = 'images/' + sex + '-' + pos + '.png';
+                        window.sessionStorage.setItem('user', JSON.stringify({"nickname": nickname, "header": avatar}))
+                    }
+                }
+            }
+        } else {
+            alert('connected error');
+        }
+
+        var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+        $("#header-image").attr('src', user.header);
+        $("#nickname").html(user.nickname);
+
+        //loading all chat room
+        search();
+    });
+
+    //revice message from server
+    socket.on('message', function (res) {
+        // console.log(res);
+        var user = JSON.parse(window.sessionStorage.getItem('user'));
+        var to = res.sender === user.nickname ? 'self' : 'other';
+        var time = new Date(parseInt(res.time) * 1000).toLocaleString('canada', {hour12: false}).split(" ")[1];
+
+        $(".list-box[data-name='" + res.receiver + "']").empty().append('<img class="chat-head" src="' + res.header + '" alt="">\n' +
+            '                <div class="chat-rig">\n' +
+            '                    <p class="title">' + res.receiver + '</p>\n' +
+            '                    <p class="text">' + res.sender + ': ' + res.message + '</p>\n' +
+            '                </div>');
+
+        if ($("#group-title").html() === res.receiver) {
+
+            message.innerHTML += '<li class="' + to + '">\n' +
+                '                            <div class="avatar"><img src="' + res.header + '" alt=""></div>\n' +
+                '                            <div class="msg">\n' +
+                '                                <p class="msg-name" '+(to === 'self' ? 'style="text-align:right;"' : '')+'>' + res.sender + '</p>\n' +
+                '                                <p class="msg-text">' + res.message + '\n' +
+                '                                    <emoji class="pizza"></emoji>\n' +
+                '                                </p>\n' +
+                '                                <time>' + time + '</time>\n' +
+                '                            </div>\n' +
+                '                        </li>';
+            div.scrollTop = div.scrollHeight;
+        }
+    });
+
+    socket.on('join',function (result) {
+        // alert(res.user+" join "+res.room);
+        if (!$(".message").find('li').length) {
+            $.post('http://localhost:3000/api/roomhistory', {'roomname': result.room}, function (res) {
+                // console.log(res);
+                var html = '';
+                var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+                $.each(res, function (k, v) {
+                    var to = v.sender === user.nickname ? 'self' : 'other';
+                    var time = new Date(parseInt(v.time) * 1000).toLocaleString('canada', {hour12: false}).split(" ")[1];
+
+                    html += '<li class="' + to + '">\n' +
+                        '                            <div class="avatar"><img src="' + v.header + '" alt=""></div>\n' +
+                        '                            <div class="msg">\n' +
+                        '                                <p class="msg-name" '+(to === 'self' ? 'style="text-align:right;"' : '')+'>' + v.sender + '</p>\n' +
+                        '                                <p class="msg-text">' + v.message + '\n' +
+                        '                                    <emoji class="pizza"></emoji>\n' +
+                        '                                </p>\n' +
+                        '                                <time>' + time + '</time>\n' +
+                        '                            </div>\n' +
+                        '                  </li>';
+                });
+                html += '<li class="system">\n' +
+                    '                            <div>\n' +
+                    '                                <p>[system] '+result.user+' joined room</p>\n' +
+                    '                            </div>\n' +
+                    '                  </li>';
+                message.innerHTML = html;
+            });
+        }else{
+            message.innerHTML += '<li class="system">\n' +
+                '                            <div>\n' +
+                '                                <p>[system] '+result.user+' joined room</p>\n' +
+                '                            </div>\n' +
+                '                  </li>';
+        }
+
+        div.scrollTop = div.scrollHeight;
+    });
+
+    socket.on('leave',function (res) {
+        // alert(res.user+" leave "+res.room);
+        var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+        if(res.user === user.nickname){
+            $(".list-box[data-name='" + res.room + "']").empty().append('<img class="chat-head" src="' + user.header + '" alt="">\n' +
+                '                <div class="chat-rig">\n' +
+                '                    <p class="title">' + res.room + '</p>\n' +
+                '                    <p class="text">[system] ' + res.user + ' leave</p>\n' +
+                '                </div>');
+        }else{
+            message.innerHTML += '<li class="system">\n' +
+                '                            <div>\n' +
+                '                    <p class="text">[system] ' + res.user + ' leave</p>\n' +
+                '                            </div>\n' +
+                '                  </li>';
+        }
+		div.scrollTop = div.scrollHeight;
+    });
+
+	socket.on('disconnect',function (res) {
+        //alert(res.user+" leave "+res.room);
+        var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+        if(res.user === user.nickname){
+            $(".list-box[data-name='" + res.room + "']").empty().append('<img class="chat-head" src="' + user.header + '" alt="">\n' +
+                '                <div class="chat-rig">\n' +
+                '                    <p class="title">' + res.room + '</p>\n' +
+                '                    <p class="text">[system] ' + res.user + ' disconnect</p>\n' +
+                '                </div>');
+        }else{
+            message.innerHTML += '<li class="system">\n' +
+                '                            <div>\n' +
+                '                    <p class="text">[system] ' + res.user + ' disconnect</p>\n' +
+                '                            </div>\n' +
+                '                  </li>';
+        }
+		div.scrollTop = div.scrollHeight;
+    });
+	
+    //press enter send message
+    $(document).keyup(function(event){
+        if(event.keyCode===13){
+            send();
+            return false;
+        }
+    });
+
+    $("#group").on('click', '.list-box', function () {
+        if($(this).attr('data-name') === $("#group-title").html()) return false;
+
+        $(".list-box").each(function () {
+            if ($(this).hasClass('select')) {
+                $(this).removeClass('select');
+            }
+        });
+
+        $(this).addClass('select');
+
+        $("#group-title").html($(this).attr('data-name'));
+
+        $(".message").html('');
+
+        var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+        socket.emit('join', {
+            user: user.nickname,
+            room: $("#group-title").html()
+        });
+    });
+
+    $("#create-group").click(function () {
+        var room = prompt('please input chat room name');
+
+        if(room){
+            var user = JSON.parse(window.sessionStorage.getItem('user'));
+
+            socket.emit('message', {
+                id: 1,
+                sender: user.nickname,
+                header: user.header,
+                receiver: room,
+                message: 'Create successful conversations with friends',
+                time: Date.parse(new Date()) / 1000
+            });
+
+            socket.emit('join', {
+                user: user.nickname,
+                room: room
+            });
+
+            $.post('http://localhost:3000/api/roomlist', {'roomname': ''}, function (data) {
+
+                var html = '';
+                $.each(data, function (k, v) {
+                    var select = (v.name === room ? ' select' : '');
+                    html += '<div data-name="' + v.name + '" class="list-box' + select + '">\n' +
+                        '                <img class="chat-head" src="' + v.header + '" alt="">\n' +
+                        '                <div class="chat-rig">\n' +
+                        '                    <p class="title">' + v.name + '</p>\n' +
+                        '                    <p class="text">' + v.sender + ': ' + v.message + '</p>\n' +
+                        '                </div>\n' +
+                        '               </div>'
+                });
+                $("#group").html(html);
+
+                $("#group-title").html(room);
+
+                $.post('http://localhost:3000/api/roomhistory', {'roomname': room}, function (res) {
+                    // console.log(res);
+                    var html = '';
+                    $.each(res, function (k, v) {
+                        let user = JSON.parse(window.sessionStorage.getItem('user'));
+                        var to = v.sender === user.nickname ? 'self' : 'other';
+                        var time = new Date(parseInt(v.time) * 1000).toLocaleString('canada', {hour12: false}).split(" ")[1];
+
+                        html += '<li class="' + to + '">\n' +
+                            '                            <div class="avatar"><img src="' + v.header + '" alt=""></div>\n' +
+                            '                            <div class="msg">\n' +
+                            '                                <p class="msg-name" '+(to === 'self' ? 'style="text-align:right;"' : '')+'>' + v.sender + '</p>\n' +
+                            '                                <p class="msg-text">' + v.message + '\n' +
+                            '                                    <emoji class="pizza"></emoji>\n' +
+                            '                                </p>\n' +
+                            '                                <time>' + time + '</time>\n' +
+                            '                            </div>\n' +
+                            '                  </li>';
+                    });
+                    message.innerHTML = html;
+                    div.scrollTop = div.scrollHeight;
+                });
+            })
+        }
+    })
+</script>
+</body>
+</html>
